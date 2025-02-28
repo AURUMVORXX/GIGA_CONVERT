@@ -214,21 +214,29 @@ def main(page: ft.Page):
             spacing=40,
         ),
         ],
+        offset=ft.Offset(0, 0.8),
         alignment=ft.MainAxisAlignment.CENTER,
         spacing=20,
         )
+    
+    main_container = ft.Column(
+        [
+            content,
+            ft.Container(
+                content=github_link,
+                alignment=ft.alignment.center,
+                offset=ft.Offset(0, 22),
+            ),
+        ],
+        expand=True,  # Растягиваем контейнер на всю высоту
+    )
     
     stack = ft.Stack(
         [
             background_image,
             ft.Container(
-                content=content,
+                content=main_container,
                 padding=20, 
-            ),
-            ft.Container(
-                content=github_link,
-                alignment=ft.alignment.center,
-                padding=ft.padding.only(top=800),
             ),
         ],
         width=page.width,
