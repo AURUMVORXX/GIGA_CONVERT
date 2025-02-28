@@ -3,17 +3,24 @@ import json
 import math
 
 def convert(text):
+    '''
+    Конвертация конфига старого формата в новый
+    '''
+    jsondict = None     # Общий словарь с конфигом: 'project_slug': {}
     try:
+        # Удаляем запятую с конца, чтобы она не ломала JSON формат
         if text[-1] == ',':
             text = text[:-1]
+            
+        # Оборачиваем инпут кавычками для корректного JSON формата
         jsondict = json.loads('{' + text + '}')
     except Exception:
         return ''
     
-    inputdict = jsondict[next(iter(jsondict))]
+    inputdict = jsondict[next(iter(jsondict))]      # Словарь с настройками конкретного проекта
     
-    output = {next(iter(jsondict)): dict()}
-    params = output[next(iter(output))]
+    output = {next(iter(jsondict)): dict()}         # Общий выходной словарь: 'project_slug': {}
+    params = output[next(iter(output))]             # Выходной словарь с настройками конкретного проекта
     
     if 'conditions' in inputdict:
         params['condition'] = convert_condition(inputdict['conditions'])
@@ -28,12 +35,19 @@ def convert(text):
     params['slipped_out_messages_handling'] = 'wait_for_new_events'
         
     return json.dumps(output, indent=4)
-    
-def convert_condition(input_data):
+
+def convert_condition(input_data, lastKey=''):
+    '''
+    Рекурсивная конвертация условия старого конфига в Pypred формат
+    '''
     output_pypred = ''
     
-    if type(input_data) == dict:
+    if input_data is dict:
         for key, value in input_data.items():
+            
+            # Добавляем оператор and к блокам, где нет явного указания оператора
+            if lastKey != '' and len(output_pypred) != 0:
+                output_pypred += ' and '
             
             if key == '#or':
                 output_pypred += '('
@@ -66,23 +80,23 @@ def convert_condition(input_data):
                 output_pypred += ')'
                     
             if key == '#not':
-                output_pypred += f'not {convert_condition(value)}'
+                output_pypred += f'{convert_condition(value)}'
                 
             if key == "#exists":
-                if value == True:
-                    output_pypred += f'is not undefined'
+                if value:
+                    output_pypred += 'is not undefined'
                 else:
-                    output_pypred += f'is undefined'
+                    output_pypred += 'is undefined'
                     
             if key == '#in':
-                output_pypred += 'matches \''
+                output_pypred += f'{lastKey} matches \''
                 for cond in value:
                     
                     output_pypred += f'{cond}|'
                 output_pypred = output_pypred[:-1] + '\''
                 
             if key == '#nin':
-                output_pypred += 'not matches \''
+                output_pypred += f'{lastKey} not matches \''
                 for cond in value:
                     
                     output_pypred += f'{cond}|'
@@ -93,7 +107,7 @@ def convert_condition(input_data):
                 if len(output_pypred) != 0:
                     output_pypred += ' and '
                     
-                output_pypred = f'line {convert_condition(value)}'
+                output_pypred = f'{convert_condition(value, 'line')}'
                 
             if key.startswith('meta_info'):
                 
@@ -101,9 +115,9 @@ def convert_condition(input_data):
                     output_pypred += ' and '
                     
                 meta_name = key.replace('/', '.')
-                output_pypred += f'{meta_name} {convert_condition(value)}'
+                output_pypred += f'{meta_name} {convert_condition(value, 'meta_info')}'
                 
-    elif type(input_data) == str:
+    elif input_data is str:
         return f"== '{input_data}'"
     else:
         return f"== {input_data}"
@@ -156,9 +170,14 @@ def main(page: ft.Page):
         right_text_field.value = convert(left_text_field.value)
         page.update()
         
-    # Добавляем элементы на страницу
-    page.add(
-    ft.Column([
+    background_image = ft.Image(
+        src="orig.jpg",
+        fit=ft.ImageFit.COVER,
+        width=page.width,
+        height=page.height
+    )
+    
+    content=ft.Column([
         ft.Row(
             [
                 ft.Column(
@@ -183,6 +202,19 @@ def main(page: ft.Page):
         alignment=ft.MainAxisAlignment.CENTER,
         spacing=20,
         )
+    
+    stack = ft.Stack(
+        [
+            background_image,
+            ft.Container(
+                content=content,
+                padding=20, 
+            ),
+        ],
+        width=page.width,
+        height=page.height,
     )
+    
+    page.add(stack)
 
-ft.app(target=main)
+ft.app(target=main, view=ft.WEB_BROWSER)
