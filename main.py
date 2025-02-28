@@ -177,6 +177,21 @@ def main(page: ft.Page):
         height=page.height
     )
     
+    # Ссылка на GitHub-репозиторий
+    github_link = ft.Text(
+        "",
+        size=16,
+        color=ft.colors.WHITE,
+        weight=ft.FontWeight.BOLD,
+        spans=[
+            ft.TextSpan(
+                'https://github.com/AURUMVORXX/GIGA_CONVERT',
+                url='https://github.com/AURUMVORXX/GIGA_CONVERT', 
+                style=ft.TextStyle(decoration=ft.TextDecoration.UNDERLINE),
+            )
+        ],
+    )
+    
     content=ft.Column([
         ft.Row(
             [
@@ -209,6 +224,11 @@ def main(page: ft.Page):
             ft.Container(
                 content=content,
                 padding=20, 
+            ),
+            ft.Container(
+                content=github_link,
+                alignment=ft.alignment.center,
+                padding=ft.padding.only(top=800),
             ),
         ],
         width=page.width,
