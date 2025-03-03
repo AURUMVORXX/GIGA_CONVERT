@@ -23,7 +23,6 @@ def convert(text):
     params = output[next(iter(output))]             # Выходной словарь с настройками конкретного проекта
     
     if 'conditions' in inputdict:
-        print('yes')
         params['condition'] = convert_condition(inputdict['conditions'])
     
     if 'delay_range' in inputdict:
@@ -117,7 +116,7 @@ def convert_condition(input_data, lastKey=''):
                     output_pypred += ' and '
                     
                 meta_name = key.replace('/', '.')
-                output_pypred += f'{meta_name} {convert_condition(value, 'meta_info')}'
+                output_pypred += convert_condition(value, meta_name)
                 
     elif type(input_data) is str:
         return f"== '{input_data}'"
