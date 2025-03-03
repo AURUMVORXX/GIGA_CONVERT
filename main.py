@@ -23,16 +23,16 @@ def convert(text):
     params = output[next(iter(output))]             # Выходной словарь с настройками конкретного проекта
     
     if 'conditions' in inputdict:
+        print('yes')
         params['condition'] = convert_condition(inputdict['conditions'])
     
     if 'delay_range' in inputdict:
         delay_mid = math.floor(sum(inputdict['delay_range']) / len(inputdict['delay_range']))
-        params['steps'] = {'delay_s': delay_mid, 'event_types': ['new_message', 'chat_open']}
+        params['steps'] = [{'delay_s': delay_mid, 'event_types': ['new_message', 'chat_open', 'ticket_reactivated_after_defer']}]
     
     if 'project_id' in inputdict:
-        params['project_slug'] = inputdict['project_id']
-        
-    params['slipped_out_messages_handling'] = 'wait_for_new_events'
+        params['steps'][0]['project_slug'] = inputdict['project_id']
+        params['steps'][0]['slipped_out_messages_handling'] = 'wait_for_new_events'
         
     return json.dumps(output, indent=4)
 
@@ -42,7 +42,7 @@ def convert_condition(input_data, lastKey=''):
     '''
     output_pypred = ''
     
-    if input_data is dict:
+    if type(input_data) is dict:
         for key, value in input_data.items():
             
             # Добавляем оператор and к блокам, где нет явного указания оператора
@@ -117,7 +117,7 @@ def convert_condition(input_data, lastKey=''):
                 meta_name = key.replace('/', '.')
                 output_pypred += f'{meta_name} {convert_condition(value, 'meta_info')}'
                 
-    elif input_data is str:
+    elif type(input_data) is str:
         return f"== '{input_data}'"
     else:
         return f"== {input_data}"
