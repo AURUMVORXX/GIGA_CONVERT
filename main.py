@@ -34,7 +34,9 @@ def convert(text):
         params['steps'][0]['project_slug'] = inputdict['project_id']
         params['steps'][0]['slipped_out_messages_handling'] = 'wait_for_new_events'
         
-    return json.dumps(output, indent=4)
+    result = json.dumps(output, indent=4)
+    result = result[6:-2]
+    return result
 
 def convert_condition(input_data, lastKey=''):
     '''
