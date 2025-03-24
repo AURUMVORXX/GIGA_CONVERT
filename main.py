@@ -2,7 +2,18 @@ import flet as ft
 import json
 import math
 
-def convert(text):
+unsupported_types: list[str] = [
+    'chat_type',
+    'event_type'
+]
+
+def delete_unsupported_keys(input_data: dict[str, str]):
+    global unsupported_types
+    for entry in unsupported_types:
+        input_data.pop(entry, None)
+    return input_data
+
+def convert(text, group = 'main', format_end_string = False):
     '''
     Конвертация конфига старого формата в новый
     '''
@@ -27,103 +38,71 @@ def convert(text):
     
     if 'delay_range' in inputdict:
         delay_mid = math.floor(sum(inputdict['delay_range']) / len(inputdict['delay_range']))
-        params['steps'] = [{'delay_s': delay_mid, 'event_types': ['new_message', 'chat_open', 'ticket_reactivated_after_defer']}]
+        params['delay_s'] = delay_mid
+        params['event_types'] = ['new_message', 'chat_open', 'ticket_reactivated_after_defer']
     
     if 'project_id' in inputdict:
-        params['steps'][0]['project_slug'] = inputdict['project_id']
-        params['steps'][0]['slipped_out_messages_handling'] = 'wait_for_new_events'
+        params['group'] = group
+        params['project_slug'] = inputdict['project_id']
+        params['slipped_out_messages_handling'] = 'wait_for_new_events'
         
     result = json.dumps(output, indent=4)
     result = result[6:-2]
+    if format_end_string:
+        result += ','
     return result
 
-def convert_condition(input_data, lastKey=''):
+def convert_condition(input_data: dict[str, str], lastKey=''):
     '''
     Рекурсивная конвертация условия старого конфига в Pypred формат
     '''
-    output_pypred = ''
+    output_pypred = None
+    input_data = delete_unsupported_keys(input_data)
     
-    if type(input_data) is dict:
-        for key, value in input_data.items():
-            
-            # Добавляем оператор and к блокам, где нет явного указания оператора
-            if lastKey != '' and len(output_pypred) != 0:
-                output_pypred += ' and '
-            
-            if key == '#or':
-                output_pypred += '('
-                for cond in value:
-                        
-                    if len(output_pypred) != 1:
-                        output_pypred += ' or '
-                        
-                    converted_cond = convert_condition(cond)
-                    if len(converted_cond) != 0:
-                        output_pypred += f'({converted_cond})'
-                
-                if output_pypred.endswith(' or '):
-                    output_pypred = output_pypred[:-4]
-                output_pypred += ')'
-                    
-            if key == '#and':
-                output_pypred += '('
-                for cond in value:
-                        
-                    if len(output_pypred) != 1:
-                        output_pypred += ' and '
-                        
-                    converted_cond = convert_condition(cond)
-                    if len(converted_cond) != 0:
-                        output_pypred += f'({converted_cond})'
-                
-                if output_pypred.endswith(' and '):
-                    output_pypred = output_pypred[:-5]
-                output_pypred += ')'
-                    
-            if key == '#not':
-                output_pypred += f'{convert_condition(value)}'
-                
-            if key == "#exists":
-                if value:
-                    output_pypred += 'is not undefined'
+    # Обрабатываем случаи, когда неявный оператор #and в старом конфиге
+    if lastKey == '':
+        if ('#or' in input_data.keys() or '#and' in input_data.keys()) and len(input_data) > 1:
+            input_data = {'#and': [input_data]}
+        elif '#or' not in input_data.keys() and '#and' not in input_data.keys() and len(input_data) > 1:
+           input_data = {'#and': [input_data]}
+    
+    for key, value in input_data.items():
+        if key == '#or' or key == '#and':
+            if lastKey != '':
+                output_pypred = list()
+                output_pypred.append(dict())
+                output_pypred[0]['operand'] = key[1:]
+                if len(value) > 1:
+                    output_pypred[0]['parts'] = [convert_condition({'#and': [x]}, key) for x in value]
                 else:
-                    output_pypred += 'is undefined'
-                    
-            if key == '#in':
-                output_pypred += f'{lastKey} matches \''
-                for cond in value:
-                    
-                    output_pypred += f'{cond}|'
-                output_pypred = output_pypred[:-1] + '\''
-                
-            if key == '#nin':
-                output_pypred += f'{lastKey} not matches \''
-                for cond in value:
-                    
-                    output_pypred += f'{cond}|'
-                output_pypred = output_pypred[:-1] + '\''
-                    
-            if key == 'line':
-                
-                if len(output_pypred) != 0:
-                    output_pypred += ' and '
-                    
-                output_pypred = f'{convert_condition(value, 'line')}'
-                
+                    output_pypred[0]['parts'] = [convert_condition(x, key) for x in value]
+                 
+                print(len(output_pypred[0]['parts']))    
+                if len(output_pypred[0]['parts']) == 1:
+                    output_pypred = output_pypred[0]['parts'][0]
+            else:
+                output_pypred = dict()
+                output_pypred['operand'] = key[1:]
+                output_pypred['parts'] = convert_condition(value[0], key)
+                if len(output_pypred['parts']) == 1:
+                    output_pypred = output_pypred['parts'][0]
+        elif key == '#in':
+            output_pypred = f'{lastKey} matches \'{'|'.join(value)}\''
+        elif key == '#nin':
+            output_pypred = f'{lastKey} not matches \'{'|'.join(value)}\''
+        else:
             if key.startswith('meta_info'):
-                
-                if len(output_pypred) != 0:
-                    output_pypred += ' and '
-                    
-                meta_name = key.replace('/', '.')
-                output_pypred += convert_condition(value, meta_name)
-                
-    elif type(input_data) is str:
-        return f"== '{input_data}'"
-    else:
-        return f"== {input_data}"
-                
-                    
+                key = key.replace('/', '.')
+            if output_pypred is None:
+                output_pypred = list()
+            if type(value) is dict:
+                if type(output_pypred) is list:
+                    output_pypred.append(convert_condition(value, key))
+                else:
+                    output_pypred[key] = convert_condition(value, key)
+            else:
+                output_pypred.append(f'{key} matches {value}')
+    
     return output_pypred
             
     
@@ -167,9 +146,6 @@ def main(page: ft.Page):
         border_color=ft.colors.WHITE,
         border_width=2,
     )
-    def update_right_field(e):
-        right_text_field.value = convert(left_text_field.value)
-        page.update()
         
     background_image = ft.Image(
         src="orig.jpg",
@@ -192,6 +168,17 @@ def main(page: ft.Page):
             )
         ],
     )
+    
+    group_select_title = ft.Text('Группа:')
+    group_select_buttons = ft.RadioGroup(content=ft.Column([
+    ft.Radio(value="main", label="main"),
+    ft.Radio(value="pre", label="pre")]), value='main', on_change=lambda e: update_right_field(e))
+    
+    format_end_string = ft.Checkbox(label='Добавить запятую в конце', on_change=lambda e: update_right_field(e))
+    
+    def update_right_field(e):
+        right_text_field.value = convert(left_text_field.value, group_select_buttons.value, format_end_string.value)
+        page.update()
     
     content=ft.Column([
         ft.Row(
@@ -223,10 +210,16 @@ def main(page: ft.Page):
     main_container = ft.Column(
         [
             content,
+            group_select_title,
+            group_select_buttons,
+            ft.Container(
+                content=format_end_string,
+                offset=ft.Offset(0, 2)
+            ),
             ft.Container(
                 content=github_link,
                 alignment=ft.alignment.center,
-                offset=ft.Offset(0, 22),
+                offset=ft.Offset(0, 12),
             ),
         ],
         expand=True,  # Растягиваем контейнер на всю высоту
